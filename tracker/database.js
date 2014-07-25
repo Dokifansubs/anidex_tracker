@@ -145,7 +145,7 @@ Database.prototype.removePeer = function(peer, callback) {
                                                     callback(err, undefined);
                                                 })
                                             } else {
-                                                this.connection.commit(function(err)) {
+                                                this.connection.commit(function(err) {
                                                     if (err) {
                                                         this.connection.rollback(function() {
                                                             callback(err, undefined);
@@ -154,7 +154,7 @@ Database.prototype.removePeer = function(peer, callback) {
                                                         console.log('Removed peer ' + item.peer_id + ' for torrent: ' + item.info_hash);
                                                         this.getPeers(peer, callback);
                                                     }
-                                                }.bind(this);
+                                                }.bind(this));
                                             }
                                     }.bind(this));
                                 }
