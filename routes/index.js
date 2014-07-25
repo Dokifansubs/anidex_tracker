@@ -98,9 +98,6 @@ exports.announce = function(req, res) {
                 console.log('Peer: ' + peer.peer_id + ' entered swarm as leecher for torrent: ' + peer.info_hash);
             }
 
-            console.log('Peer information: ');
-            console.log(peer);
-
             database.addPeer(peer, function(err, response) {
                 if (err) {
                     throw err;
@@ -116,7 +113,6 @@ exports.announce = function(req, res) {
                 if (err) {
                     throw err;
                 } else {
-                    console.log(bencode.decode(response));
                     res.end(response, 'binary');
                 }
             });

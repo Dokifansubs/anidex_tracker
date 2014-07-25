@@ -124,25 +124,42 @@ Database.prototype.removePeer = function(peer, callback) {
             } else {
                 // TODO: Convert this to a function. (Also used by flushPeers)
                 rows.forEach(function(item) {
-                    var field = '';
-                    if (item.left == 0) {
-                        field = '`complete`' ;
-                    } else {
-                        field = '`incomplete`';
-                    }
-                    this.connection.query('UPDATE `nodetracker`.`torrent` '
-                        + 'SET ' + field + ' = ' + field + ' - 1 '
-                        + 'WHERE `info_hash` = ' + this.connection.escape(item.info_hash) + ' '
-                        + 'AND ' + field + ' > 0'
-                        , function(err, result) {
-                            console.log('Decremented ' + field + ' on ' + item.info_hash);
-                    }.bind(this));
-                    this.connection.query('DELETE FROM `nodetracker`.`peers` '
-                        + 'WHERE `id` = ' + this.connection.escape(item.id)
-                        , function(err, result) {
-                            console.log('Removed peer ' + item.peer_id + ' for torrent: ' + item.info_hash);
-                    }.bind(this));
-                    this.getPeers(peer, callback);
+                    var field = item.left == 0 ? '`complete`' : '`incomplete`';
+                    this.connection.beginTransaction(function(err) {
+                        this.connection.query('UPDATE `nodetracker`.`torrent` '
+                            + 'SET ' + field + ' = ' + field + ' - 1 '
+                            + 'WHERE `info_hash` = ' + this.connection.escape(item.info_hash) + ' '
+                            + 'AND ' + field + ' > 0'
+                            , function(err, result) {
+                                if (err) {
+                                    this.connection.rollback(function() {
+                                        callback(err, undefined);
+                                    })
+                                } else {
+                                    console.log('Decremented ' + field + ' on ' + item.info_hash);
+                                    this.connection.query('DELETE FROM `nodetracker`.`peers` '
+                                        + 'WHERE `id` = ' + this.connection.escape(item.id)
+                                        , function(err, result) {
+                                            if (err) {
+                                                this.connection.rollback(function() {
+                                                    callback(err, undefined);
+                                                })
+                                            } else {
+                                                this.connection.commit(function(err)) {
+                                                    if (err) {
+                                                        this.connection.rollback(function() {
+                                                            callback(err, undefined);
+                                                        });
+                                                    } else {
+                                                        console.log('Removed peer ' + item.peer_id + ' for torrent: ' + item.info_hash);
+                                                        this.getPeers(peer, callback);
+                                                    }
+                                                }.bind(this);
+                                            }
+                                    }.bind(this));
+                                }
+                        }.bind(this));
+                    })
                 }.bind(this));
             }
     }.bind(this));
