@@ -136,12 +136,12 @@ Database.prototype.removePeer = function(peer, callback) {
                         + 'AND ' + field + ' > 0'
                         , function(err, result) {
                             console.log('Decremented ' + field + ' on ' + item.info_hash);
-                    });
+                    }.bind(this));
                     this.connection.query('DELETE FROM `nodetracker`.`peers` '
                         + 'WHERE `id` = ' + this.connection.escape(item.id)
                         , function(err, result) {
                             console.log('Removed peer ' + item.peer_id + ' for torrent: ' + item.info_hash);
-                    });
+                    }.bind(this));
                     this.getPeers(peer, callback);
                 }.bind(this));
             }
@@ -168,8 +168,6 @@ Database.prototype.completePeer = function(peer, callback) {
 };
 
 // Updates the peer in the database.
-// TODO: uTorrent doesn't send "started" when it resumes from paused/stopped state
-// only when it restarts. Peer could have been deleted from database when it resumes.
 Database.prototype.updatePeer = function(peer, callback) {
     this.connection.query('UPDATE `nodetracker`.`peers` '
         + 'SET `uploaded` = ' + this.connection.escape(peer.uploaded) + ', '
