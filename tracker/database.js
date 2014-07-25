@@ -159,7 +159,7 @@ Database.prototype.removePeer = function(peer, callback) {
                                     }.bind(this));
                                 }
                         }.bind(this));
-                    })
+                    }.bind(this));
                 }.bind(this));
             }
     }.bind(this));
