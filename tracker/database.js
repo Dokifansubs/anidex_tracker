@@ -12,7 +12,6 @@ var mysqlconf = require('./../conf/mysql.json');
 
 // Removes peers from database whose last update is more than 1 hour.
 Database.prototype.flushPeers = function() {
-    console.log('Flushing peers');
     // Delete all peers whose last update is more than 1 hour ago.
     this.connection.query('SELECT `id`, `peer_id`, `info_hash`, `left` '
         + 'FROM `nodetracker`.`peers` '
@@ -26,6 +25,7 @@ Database.prototype.flushPeers = function() {
                 } else {
                     field = '`incomplete`';
                 }
+                // TODO: Convert to transaction.
                 this.connection.query('UPDATE `nodetracker`.`torrent` '
                     + 'SET ' + field + ' = ' + field + ' - 1 '
                     + 'WHERE `info_hash` = ' + this.connection.escape(item.info_hash) + ' '
@@ -115,6 +115,7 @@ Database.prototype.transaction = function(peer, callback) {
 
 // Removes peer from database.
 Database.prototype.removePeer = function(peer, callback) {
+    // Select correct peer.
     this.connection.query('SELECT `id`, `peer_id`, `info_hash`, `left` '
         + 'FROM `nodetracker`.`peers` '
         + 'WHERE `id` = ' + this.connection.escape(peer.peer_id + peer.info_hash)
@@ -124,8 +125,10 @@ Database.prototype.removePeer = function(peer, callback) {
             } else {
                 // TODO: Convert this to a function. (Also used by flushPeers)
                 rows.forEach(function(item) {
+                    // Peer was a seeder or leecher?
                     var field = item.left == 0 ? '`complete`' : '`incomplete`';
                     this.connection.beginTransaction(function(err) {
+                        // Update correct field in torrents.
                         this.connection.query('UPDATE `nodetracker`.`torrent` '
                             + 'SET ' + field + ' = ' + field + ' - 1 '
                             + 'WHERE `info_hash` = ' + this.connection.escape(item.info_hash) + ' '
@@ -134,9 +137,9 @@ Database.prototype.removePeer = function(peer, callback) {
                                 if (err) {
                                     this.connection.rollback(function() {
                                         callback(err, undefined);
-                                    })
+                                    });
                                 } else {
-                                    console.log('Decremented ' + field + ' on ' + item.info_hash);
+                                    // Delete peer from database.
                                     this.connection.query('DELETE FROM `nodetracker`.`peers` '
                                         + 'WHERE `id` = ' + this.connection.escape(item.id)
                                         , function(err, result) {
@@ -151,7 +154,8 @@ Database.prototype.removePeer = function(peer, callback) {
                                                             callback(err, undefined);
                                                         });
                                                     } else {
-                                                        console.log('Removed peer ' + item.peer_id + ' for torrent: ' + item.info_hash);
+                                                        // Return list of peers.
+                                                        // (required by deluge on pause torrents for some reason)
                                                         this.getPeers(peer, callback);
                                                     }
                                                 }.bind(this));
@@ -165,22 +169,48 @@ Database.prototype.removePeer = function(peer, callback) {
     }.bind(this));
 };
 
+// Checks if torrent was already completed by peer.
+// To prevent completed spam.
+Database.prototype.checkComplete = function(peer, callback) {
+    this.connection.query('SELECT `left` '
+        + 'FROM `nodetracker`.`peers` '
+        + 'WHERE `id` = ' + this.connection.escape(peer.peer_id) + ' '
+        + 'AND `info_hash = ' + this.connection.escape(peer.info_hash)
+        , function(err, rows, fields) {
+            if (err) {
+                callback(err);
+            } else if (rows.length == 1 && rows[0].left == 0) {
+                callback(1);
+            } else {
+                callback(undefined);
+            }
+    }.bind(this));
+};
+
 // Increments the completed count for torrent.
 // TODO: Clients can spam complete count and it will keep increasing,
 // should add check to prevent clients with left=0 from sending complete
 // (or just add completed boolean)
 Database.prototype.completePeer = function(peer, callback) {
-    this.connection.query('UPDATE `nodetracker`.`torrent` '
-        + 'SET `downloaded` = `downloaded` + 1, '
-        + '`incomplete` = `incomplete` - 1, '
-        + '`complete` = `complete` + 1 '
-        + 'WHERE `info_hash` = ' + this.connection.escape(peer.info_hash)
-        , function(err, result) {
-            if (err) {
-                callback(err, undefined);
-            } else {
-                this.updatePeer(peer, callback);
-            }
+    this.checkComplete(peer, function(err) {
+        if (err == 1) {
+            callback(undefined, common.bencodeFailure(900, 'Torrent already reported as completed'));
+        } else if (err) {
+            callback(err, undefined);
+        } else {
+            this.connection.query('UPDATE `nodetracker`.`torrent` '
+                + 'SET `downloaded` = `downloaded` + 1, '
+                + '`incomplete` = `incomplete` - 1, '
+                + '`complete` = `complete` + 1 '
+                + 'WHERE `info_hash` = ' + this.connection.escape(peer.info_hash)
+                , function(err, result) {
+                    if (err) {
+                        callback(err, undefined);
+                    } else {
+                        this.updatePeer(peer, callback);
+                    }
+            }.bind(this));
+        }
     }.bind(this));
 };
 
@@ -197,7 +227,6 @@ Database.prototype.updatePeer = function(peer, callback) {
             } else {
                 this.getPeers(peer, callback);
             }
-
     }.bind(this));
 };
 
@@ -246,7 +275,7 @@ Database.prototype.scrape = function(info_hash, callback) {
     if (Array.isArray(info_hash)) {
         info_hash = _.map(info_hash, function(item) {
             return this.connection.escape(item);
-        }.bind(this))
+        }.bind(this));
         info_hash = info_hash.join(',');
     } else {
         info_hash = this.connection.escape(info_hash);
