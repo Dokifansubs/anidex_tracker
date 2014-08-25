@@ -6,6 +6,8 @@ var ipv6 = common.hexEncodeIPv6('fe80::6203:8ff:fea4:9cc', 6881);
 
 var ipv62 = common.hexEncodeIPv6('::1:', 6831);
 
+console.log(new Buffer('2d5554333331302d41751d1ff4658788c033f66a', 'hex').toString());
+
 console.log(ip);
 console.log(ipv6);
 console.log(ipv62);
