@@ -1,9 +1,7 @@
 var express = require('express');
-var http = require('http');
 var app = module.exports = express();
-var database = require('./lib/repositories/database');
 
-var app = module.exports = express();
+GLOBAL.DATABASE = require('./lib/repositories/database');
 
 app.set('port', 6969);
 app.set('views', __dirname + '/views');
@@ -17,7 +15,6 @@ if (app.get('env') === 'development') {
 }
 
 var index = require('./lib/request-handlers/index');
-index.init(database);
 app.get('/announce', index.announce);
 app.get('/scrape', index.scrape);
 
